@@ -35,6 +35,8 @@ python streaming_extractor.py
 ### Testing
 No formal test suite exists. Integration testing is done via the example scripts above.
 
+**Action Item:** A formal test suite using a framework like `pytest` should be established to ensure correctness and prevent regressions. This is a high-priority task for project health.
+
 ## Architecture Overview
 
 ### 4-Step Pipeline
