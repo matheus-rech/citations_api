@@ -71,7 +71,7 @@ STEP 4: Report Generation
 
 ## Core Modules
 
-### meta_analysis_extractor.py (512 lines)
+### meta_analysis_extractor.py (~500 lines)
 Core extraction engine using Anthropic Citations API.
 
 **Key class:** `MetaAnalysisExtractor`
