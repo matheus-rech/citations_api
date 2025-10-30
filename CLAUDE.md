@@ -274,7 +274,7 @@ The `MetaAnalysisCalculator` preserves citations through all calculations. Effec
 
 ## File Locations
 
-- Core modules: All `.py` files in root directory
+- Core modules: All `.py` files should be moved to a `src/` directory for better project structure and packaging.
 - Documentation: `README.md`, `QUICK_START.md`, `USAGE_GUIDE.md`
 - Sample report template: `index.html`
 - Dependencies: `requirements.txt`
