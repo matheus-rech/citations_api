@@ -75,7 +75,7 @@ class MetaAnalysisCalculator:
         # 95% CI
         z = 1.96
         lower_ci = np.exp(log_or - z * se_log_or)
-        upper_ci = np.exp(log_or + z * se_or)
+        upper_ci = np.exp(log_or + z * se_log_or)
         
         return log_or, se_log_or, lower_ci, upper_ci
     
