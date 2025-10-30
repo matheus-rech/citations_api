@@ -35,6 +35,8 @@ python streaming_extractor.py
 ### Testing
 No formal test suite exists. Integration testing is done via the example scripts above.
 
+**Action Item:** A formal test suite using a framework like `pytest` should be established to ensure correctness and prevent regressions. This is a high-priority task for project health.
+
 ## Architecture Overview
 
 ### 4-Step Pipeline
@@ -69,7 +71,7 @@ STEP 4: Report Generation
 
 ## Core Modules
 
-### meta_analysis_extractor.py (512 lines)
+### meta_analysis_extractor.py (~500 lines)
 Core extraction engine using Anthropic Citations API.
 
 **Key class:** `MetaAnalysisExtractor`
@@ -250,21 +252,20 @@ Return response as JSON matching the schema structure."""
 response = client.messages.create(
     model="claude-sonnet-4-5",
     max_tokens=4096,
-    extra_body={"citations": {"enabled": True}},  # Critical for citation tracking
     messages=[
         {
             "role": "user",
             "content": [
                 {
                     "type": "document",
-                    "source": {"type": "base64", "media_type": "application/pdf", "data": base64_pdf}
+                    "source": {"type": "base64", "media_type": "application/pdf", "data": base64_pdf},
+                    "citations": {"enabled": True}  # Critical for citation tracking
                 },
                 {"type": "text", "text": prompt}
             ]
         }
     ]
 )
-```
 
 ### 4. Zero-Cell Continuity Correction
 In `calculate_odds_ratio()` and `calculate_risk_ratio()`, a 0.5 continuity correction is applied when any cell has zero events. This prevents division by zero and infinite confidence intervals.
@@ -274,8 +275,8 @@ The `MetaAnalysisCalculator` preserves citations through all calculations. Effec
 
 ## File Locations
 
-- Core modules: All `.py` files in root directory
-- Documentation: `README.md`, `QUICK_START.md`, `USAGE_GUIDE.md`
+- Core modules: All `.py` files should be moved to a `src/` directory for better project structure and packaging.
+- Documentation: `README.md`, `QUICK_START.md`, `USAGE_GUIDE.md`, `CLAUDE.md`
 - Sample report template: `index.html`
 - Dependencies: `requirements.txt`
 
@@ -283,7 +284,7 @@ The `MetaAnalysisCalculator` preserves citations through all calculations. Effec
 
 **Environment variable required:** `ANTHROPIC_API_KEY`
 
-**Model used:** `claude-sonnet-4-5` (hardcoded in extractors)
+**Model used:** `claude-sonnet-4-5` (hardcoded in extractors). This should be refactored into a configurable constant.
 
 **API features used:**
 - PDF document support (base64 encoded)
@@ -331,7 +332,7 @@ From README.md and USAGE_GUIDE.md:
 **PDF extraction issues:**
 - Confirm PDFs contain text (not images)
 - Check page numbers match paper numbering
-- Use OCR preprocessing if needed for scanned papers
+- Use OCR preprocessing if needed for scanned papers (e.g., using `pytesseract` or `easyocr`).
 
 **Zero-cell problems:**
 - Continuity correction (0.5) is automatically applied
