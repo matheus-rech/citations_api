@@ -331,7 +331,7 @@ From README.md and USAGE_GUIDE.md:
 **PDF extraction issues:**
 - Confirm PDFs contain text (not images)
 - Check page numbers match paper numbering
-- Use OCR preprocessing if needed for scanned papers
+- Use OCR preprocessing if needed for scanned papers (e.g., using `pytesseract` or `easyocr`).
 
 **Zero-cell problems:**
 - Continuity correction (0.5) is automatically applied
