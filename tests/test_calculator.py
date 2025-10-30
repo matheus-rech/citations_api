@@ -261,7 +261,7 @@ class TestMetaAnalysis:
         assert 'standard_error' in results
         assert 'lower_ci' in results
         assert 'upper_ci' in results
-        assert 'z_score' in results
+        assert 'z_value' in results  # Fixed: actual field name is z_value not z_score
         assert 'p_value' in results
 
         # Check values are reasonable

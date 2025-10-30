@@ -5,6 +5,7 @@ End-to-end: PDF extraction → Effect size calculation → Meta-analysis
 
 import os
 import json
+import logging
 from pathlib import Path
 from typing import List, Dict, Any
 import anthropic
@@ -12,18 +13,36 @@ import anthropic
 # Import our custom modules
 from meta_analysis_extractor import MetaAnalysisExtractor
 from meta_analysis_calculator import MetaAnalysisCalculator
+from validation_poc import ValidationPipeline, ValidationReport
+
+logger = logging.getLogger(__name__)
 
 
 class CompleteMetaAnalysisWorkflow:
     """
     Complete workflow for conducting meta-analysis with full citation provenance
     """
-    
-    def __init__(self, api_key: str = None):
+
+    def __init__(self, api_key: str = None, enable_validation: bool = True):
+        """
+        Initialize workflow
+
+        Args:
+            api_key: Anthropic API key
+            enable_validation: Enable automatic validation of extractions (recommended)
+        """
         self.api_key = api_key or os.getenv("ANTHROPIC_API_KEY")
         self.extractor = MetaAnalysisExtractor(self.api_key)
         self.extraction_results = []
         self.calculator = None
+        self.enable_validation = enable_validation
+
+        if enable_validation:
+            self.validator = ValidationPipeline()
+            logger.info("Validation enabled - extractions will be automatically validated")
+        else:
+            self.validator = None
+            logger.warning("Validation disabled - proceeding without quality checks")
     
     def define_extraction_schema(self, study_type: str = "clinical_trial") -> Dict[str, Any]:
         """
@@ -135,40 +154,123 @@ class CompleteMetaAnalysisWorkflow:
         output_dir: str = "./extraction_output"
     ) -> List[Dict[str, Any]]:
         """
-        Step 1: Extract data from PDF papers
+        Step 1: Extract data from PDF papers with automatic validation
         """
         print("\n" + "="*70)
         print("STEP 1: DATA EXTRACTION WITH CITATIONS")
         print("="*70)
-        
+
         # Define schema
         schema = self.define_extraction_schema(study_type)
-        
+
         print(f"\nProcessing {len(pdf_paths)} papers...")
         print(f"Study type: {study_type}")
         print(f"Output directory: {output_dir}")
-        
+        if self.enable_validation:
+            print("Validation: ENABLED (recommended)")
+        else:
+            print("Validation: DISABLED")
+
         # Extract data
         self.extraction_results = self.extractor.extract_from_multiple_papers(
             pdf_paths,
             extraction_schema=schema
         )
-        
+
+        # Validate extractions if enabled
+        if self.enable_validation and self.validator:
+            print("\n" + "-"*70)
+            print("VALIDATING EXTRACTIONS")
+            print("-"*70)
+
+            validation_reports = []
+            high_confidence_count = 0
+            needs_review_count = 0
+            needs_reextract_count = 0
+
+            for result in self.extraction_results:
+                if 'error' in result:
+                    continue  # Skip failed extractions
+
+                report = self.validator.validate_extraction(result)
+                validation_reports.append(report)
+
+                # Add validation info to result
+                result['validation_report'] = {
+                    'overall_confidence': report.overall_confidence,
+                    'recommendation': report.recommendation,
+                    'quality_issues': [
+                        {'field': issue.field, 'severity': issue.severity, 'issue': issue.issue}
+                        for issue in report.quality_issues
+                    ],
+                    'fields_requiring_review': report.fields_requiring_review
+                }
+
+                # Count recommendations
+                if report.recommendation == 'accept':
+                    high_confidence_count += 1
+                elif report.recommendation == 'review':
+                    needs_review_count += 1
+                else:  # re-extract
+                    needs_reextract_count += 1
+
+                # Log warnings for low confidence
+                if report.overall_confidence < 70:
+                    logger.warning(
+                        f"Low confidence extraction for {result.get('study_id', 'Unknown')}: "
+                        f"{report.overall_confidence:.1f}%"
+                    )
+
+                # Log critical issues
+                for issue in report.quality_issues:
+                    if issue.severity == 'critical':
+                        logger.error(
+                            f"Critical issue in {result.get('study_id', 'Unknown')}: "
+                            f"{issue.field} - {issue.issue}"
+                        )
+
+            # Print validation summary
+            print(f"\n📊 Validation Summary:")
+            print(f"   ✅ High confidence: {high_confidence_count} studies")
+            print(f"   ⚠️  Needs review: {needs_review_count} studies")
+            print(f"   🔴 Needs re-extraction: {needs_reextract_count} studies")
+
+            if needs_reextract_count > 0:
+                print(f"\n⚠️  WARNING: {needs_reextract_count} studies have critical quality issues")
+                print("   Consider re-extracting these studies or manual verification")
+
+            # Save validation reports
+            validation_path = os.path.join(output_dir, "step1_validation_reports.json")
+            with open(validation_path, 'w') as f:
+                json.dump([
+                    {
+                        'study_id': r.study_id,
+                        'overall_confidence': r.overall_confidence,
+                        'recommendation': r.recommendation,
+                        'quality_issues': [
+                            {'field': i.field, 'severity': i.severity, 'issue': i.issue}
+                            for i in r.quality_issues
+                        ]
+                    }
+                    for r in validation_reports
+                ], f, indent=2)
+            print(f"\n💾 Validation reports saved to: {validation_path}")
+
         # Save results
         self.extractor.save_results(
             self.extraction_results,
             output_dir=output_dir,
             prefix="step1_extraction"
         )
-        
+
         # Print summary
         successful = sum(1 for r in self.extraction_results if "error" not in r)
         total_citations = sum(r.get("citation_count", 0) for r in self.extraction_results)
-        
+
         print(f"\n✅ Extraction complete:")
         print(f"   - {successful}/{len(pdf_paths)} papers processed successfully")
         print(f"   - {total_citations} total citations tracked")
-        
+
         return self.extraction_results
     
     def step2_calculate_effect_sizes(

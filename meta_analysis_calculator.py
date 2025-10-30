@@ -4,12 +4,15 @@ Performs statistical meta-analysis on extracted data with citation provenance
 """
 
 import json
+import logging
 import numpy as np
 import pandas as pd
 from typing import List, Dict, Any, Tuple, Optional
 from dataclasses import dataclass
 import warnings
 warnings.filterwarnings('ignore')
+
+logger = logging.getLogger(__name__)
 
 
 @dataclass
@@ -46,37 +49,74 @@ class MetaAnalysisCalculator:
         n_control: int
     ) -> Tuple[float, float, float, float]:
         """
-        Calculate odds ratio and confidence interval
-        
+        Calculate odds ratio and confidence interval with input validation
+
+        Args:
+            events_treatment: Number of events in treatment group
+            n_treatment: Total sample size in treatment group
+            events_control: Number of events in control group
+            n_control: Total sample size in control group
+
         Returns:
             (log_or, se_log_or, lower_ci, upper_ci)
+
+        Raises:
+            ValueError: If inputs are invalid
         """
+
+        # Input validation
+        if events_treatment < 0:
+            raise ValueError(f"events_treatment cannot be negative: {events_treatment}")
+        if events_control < 0:
+            raise ValueError(f"events_control cannot be negative: {events_control}")
+        if n_treatment <= 0:
+            raise ValueError(f"n_treatment must be positive: {n_treatment}")
+        if n_control <= 0:
+            raise ValueError(f"n_control must be positive: {n_control}")
+
+        if events_treatment > n_treatment:
+            raise ValueError(
+                f"events_treatment ({events_treatment}) cannot exceed n_treatment ({n_treatment})"
+            )
+        if events_control > n_control:
+            raise ValueError(
+                f"events_control ({events_control}) cannot exceed n_control ({n_control})"
+            )
+
+        logger.debug(
+            f"Calculating OR: treatment={events_treatment}/{n_treatment}, "
+            f"control={events_control}/{n_control}"
+        )
+
         # Add 0.5 to cells with zero (continuity correction)
         if events_treatment == 0 or events_control == 0 or \
            (n_treatment - events_treatment) == 0 or (n_control - events_control) == 0:
+            logger.debug("Applying continuity correction (0.5)")
             events_treatment += 0.5
             events_control += 0.5
             n_treatment += 1
             n_control += 1
-        
+
         # Calculate odds ratio
         or_value = (events_treatment / (n_treatment - events_treatment)) / \
                    (events_control / (n_control - events_control))
-        
+
         # Log odds ratio
         log_or = np.log(or_value)
-        
+
         # Standard error of log odds ratio
         se_log_or = np.sqrt(
             1/events_treatment + 1/(n_treatment - events_treatment) +
             1/events_control + 1/(n_control - events_control)
         )
-        
+
         # 95% CI
         z = 1.96
         lower_ci = np.exp(log_or - z * se_log_or)
         upper_ci = np.exp(log_or + z * se_log_or)
-        
+
+        logger.debug(f"OR calculated: {np.exp(log_or):.3f} [{lower_ci:.3f}, {upper_ci:.3f}]")
+
         return log_or, se_log_or, lower_ci, upper_ci
     
     def calculate_risk_ratio(
