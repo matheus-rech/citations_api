@@ -250,21 +250,20 @@ Return response as JSON matching the schema structure."""
 response = client.messages.create(
     model="claude-sonnet-4-5",
     max_tokens=4096,
-    extra_body={"citations": {"enabled": True}},  # Critical for citation tracking
     messages=[
         {
             "role": "user",
             "content": [
                 {
                     "type": "document",
-                    "source": {"type": "base64", "media_type": "application/pdf", "data": base64_pdf}
+                    "source": {"type": "base64", "media_type": "application/pdf", "data": base64_pdf},
+                    "citations": {"enabled": True}  # Critical for citation tracking
                 },
                 {"type": "text", "text": prompt}
             ]
         }
     ]
 )
-```
 
 ### 4. Zero-Cell Continuity Correction
 In `calculate_odds_ratio()` and `calculate_risk_ratio()`, a 0.5 continuity correction is applied when any cell has zero events. This prevents division by zero and infinite confidence intervals.
