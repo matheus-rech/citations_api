@@ -283,7 +283,7 @@ The `MetaAnalysisCalculator` preserves citations through all calculations. Effec
 
 **Environment variable required:** `ANTHROPIC_API_KEY`
 
-**Model used:** `claude-sonnet-4-5` (hardcoded in extractors)
+**Model used:** `claude-sonnet-4-5` (hardcoded in extractors). This should be refactored into a configurable constant.
 
 **API features used:**
 - PDF document support (base64 encoded)
