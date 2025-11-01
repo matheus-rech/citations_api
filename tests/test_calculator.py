@@ -86,7 +86,7 @@ class TestOddsRatioCalculation:
     def test_odds_ratio_invalid_inputs(self):
         """Test that invalid inputs are rejected"""
         # Events > sample size should raise error
-        with pytest.raises((ValueError, AssertionError)):
+        with pytest.raises(ValueError):
             self.calculator.calculate_odds_ratio(
                 events_treatment=60,  # More than n_treatment!
                 n_treatment=50,
