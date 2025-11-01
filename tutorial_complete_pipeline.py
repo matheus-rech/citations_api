@@ -236,7 +236,7 @@ def method3_custom_schema():
     print(f"\n✅ Custom extraction complete!")
     print(f"   - Extracted from {len(results)} papers")
     print(f"   - Using custom schema with {len(custom_schema)} categories")
-    print(f"   - Results saved to './custom_extraction'")
+    print("   - Results saved to './custom_extraction'")
 
 
 # ============================================================================
