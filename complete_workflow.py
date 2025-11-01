@@ -241,7 +241,7 @@ class CompleteMetaAnalysisWorkflow:
 
             # Save validation reports
             validation_path = os.path.join(output_dir, "step1_validation_reports.json")
-            with open(validation_path, 'w') as f:
+            with open(validation_path, 'w', encoding='utf-8') as f:
                 json.dump([
                     {
                         'study_id': r.study_id,
