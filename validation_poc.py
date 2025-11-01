@@ -162,9 +162,9 @@ class ConfidenceScorer:
             if 'sample_size' in field_name or 'age' in field_name or 'participants' in field_name:
                 score += 15.0
 
-        if 'results' in cited_text or 'outcomes' in cited_text or 'table' in cited_text:
-            if 'mortality' in field_name or 'outcome' in field_name:
-                score += 15.0
+        if ('results' in cited_text or 'outcomes' in cited_text or 'table' in cited_text) and ('mortality' in field_name or 'outcome' in field_name):
+            score += 15.0
+
 
         # Check for explicit vs inferred values
         if field_name.lower().replace('_', ' ') in cited_text:
