@@ -279,7 +279,6 @@ def method4_streaming():
 
     result = extractor.extract_with_streaming(
         pdf_path="papers/study1.pdf",
-        schema=schema,
         on_text_callback=on_text_chunk,
         on_citation_callback=on_citation_found
     )
