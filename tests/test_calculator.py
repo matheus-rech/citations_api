@@ -96,7 +96,7 @@ class TestOddsRatioCalculation:
 
     def test_odds_ratio_negative_values(self):
         """Test that negative values are rejected"""
-        with pytest.raises((ValueError, AssertionError)):
+        with pytest.raises(ValueError):
             self.calculator.calculate_odds_ratio(
                 events_treatment=-5,  # Negative!
                 n_treatment=50,
