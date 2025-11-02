@@ -6,10 +6,25 @@ Extracts structured data from research papers with full provenance tracking
 import anthropic
 import base64
 import json
+import logging
+import time
+import os
 from pathlib import Path
 from typing import List, Dict, Any, Optional
 from dataclasses import dataclass, asdict
 import pandas as pd
+
+# Configure logging
+logging.basicConfig(
+    level=logging.INFO,
+    format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',
+    handlers=[
+        logging.FileHandler('meta_analysis.log'),
+        logging.StreamHandler()
+    ]
+)
+
+logger = logging.getLogger(__name__)
 
 
 @dataclass
@@ -81,10 +96,30 @@ class StudyData:
 
 class MetaAnalysisExtractor:
     """Extract meta-analysis data from papers using Citations API"""
-    
-    def __init__(self, api_key: Optional[str] = None):
+
+    def __init__(
+        self,
+        api_key: Optional[str] = None,
+        max_retries: int = 3,
+        timeout: int = 120,
+        rate_limit_delay: int = 60
+    ):
+        """
+        Initialize extractor with error handling configuration
+
+        Args:
+            api_key: Anthropic API key (uses ANTHROPIC_API_KEY env var if None)
+            max_retries: Maximum number of retry attempts for API calls
+            timeout: Timeout in seconds for API calls
+            rate_limit_delay: Delay in seconds when rate limited
+        """
         self.client = anthropic.Anthropic(api_key=api_key)
         self.model = "claude-sonnet-4-5"
+        self.max_retries = max_retries
+        self.timeout = timeout
+        self.rate_limit_delay = rate_limit_delay
+
+        logger.info(f"Initialized MetaAnalysisExtractor (model={self.model}, max_retries={max_retries})")
     
     def load_pdf_as_base64(self, pdf_path: str) -> str:
         """Load PDF and encode as base64"""
@@ -154,50 +189,184 @@ Extract the data now."""
         extraction_schema: Optional[Dict[str, Any]] = None,
         document_title: Optional[str] = None
     ) -> Dict[str, Any]:
-        """Extract data from a single paper with citations"""
-        
+        """
+        Extract data from a single paper with citations and error handling
+
+        Args:
+            pdf_path: Path to PDF file
+            extraction_schema: Schema defining what to extract
+            document_title: Title for the document (uses filename if None)
+
+        Returns:
+            Dictionary with extracted data, citations, and metadata
+            On error, returns dict with 'error' key
+        """
+
         if document_title is None:
             document_title = Path(pdf_path).stem
-        
-        # Load PDF
-        pdf_base64 = self.load_pdf_as_base64(pdf_path)
-        
+
+        logger.info(f"Starting extraction for: {document_title}")
+
+        # Validate input
+        if not os.path.exists(pdf_path):
+            error_msg = f"PDF file not found: {pdf_path}"
+            logger.error(error_msg)
+            return {
+                'error': error_msg,
+                'study_id': document_title,
+                'file_path': pdf_path
+            }
+
+        try:
+            # Load PDF
+            logger.debug(f"Loading PDF: {pdf_path}")
+            pdf_base64 = self.load_pdf_as_base64(pdf_path)
+            logger.debug(f"PDF loaded, size: {len(pdf_base64)} bytes")
+
+        except Exception as e:
+            error_msg = f"Failed to load PDF: {str(e)}"
+            logger.error(error_msg)
+            return {
+                'error': error_msg,
+                'study_id': document_title,
+                'file_path': pdf_path
+            }
+
         # Create extraction schema if not provided
         if extraction_schema is None:
             extraction_schema = self._get_default_schema()
-        
+
         # Create prompt
         prompt = self.create_extraction_prompt(extraction_schema)
-        
-        # Make API call with citations enabled
-        response = self.client.messages.create(
-            model=self.model,
-            max_tokens=4096,
-            messages=[
-                {
-                    "role": "user",
-                    "content": [
+
+        # Make API call with retry logic
+        response = self._call_api_with_retry(
+            pdf_base64=pdf_base64,
+            prompt=prompt,
+            document_title=document_title
+        )
+
+        # Check for errors
+        if isinstance(response, dict) and 'error' in response:
+            logger.error(f"Extraction failed for {document_title}: {response['error']}")
+            response['study_id'] = document_title
+            response['file_path'] = pdf_path
+            return response
+
+        # Parse response and extract citations
+        try:
+            result = self._parse_response_with_citations(response, document_title)
+            logger.info(f"Successfully extracted data for: {document_title} ({result.get('citation_count', 0)} citations)")
+            return result
+
+        except Exception as e:
+            error_msg = f"Failed to parse response: {str(e)}"
+            logger.error(error_msg)
+            return {
+                'error': error_msg,
+                'study_id': document_title,
+                'file_path': pdf_path
+            }
+
+    def _call_api_with_retry(
+        self,
+        pdf_base64: str,
+        prompt: str,
+        document_title: str
+    ) -> Any:
+        """
+        Call Anthropic API with retry logic and error handling
+
+        Returns:
+            API response object on success
+            Dictionary with 'error' key on failure
+        """
+
+        for attempt in range(self.max_retries):
+            try:
+                logger.debug(f"API call attempt {attempt + 1}/{self.max_retries} for {document_title}")
+
+                response = self.client.messages.create(
+                    model=self.model,
+                    max_tokens=4096,
+                    timeout=self.timeout,
+                    messages=[
                         {
-                            "type": "document",
-                            "source": {
-                                "type": "base64",
-                                "media_type": "application/pdf",
-                                "data": pdf_base64
-                            },
-                            "title": document_title,
-                            "citations": {"enabled": True}
-                        },
-                        {
-                            "type": "text",
-                            "text": prompt
+                            "role": "user",
+                            "content": [
+                                {
+                                    "type": "document",
+                                    "source": {
+                                        "type": "base64",
+                                        "media_type": "application/pdf",
+                                        "data": pdf_base64
+                                    },
+                                    "title": document_title,
+                                    "citations": {"enabled": True}
+                                },
+                                {
+                                    "type": "text",
+                                    "text": prompt
+                                }
+                            ]
                         }
                     ]
-                }
-            ]
-        )
-        
-        # Parse response and extract citations
-        return self._parse_response_with_citations(response, document_title)
+                )
+
+                logger.debug(f"API call successful for {document_title}")
+                return response
+
+            except anthropic.APIConnectionError as e:
+                wait_time = 2 ** attempt  # Exponential backoff: 1s, 2s, 4s
+                logger.warning(
+                    f"API connection error for {document_title} (attempt {attempt + 1}/{self.max_retries}): {str(e)}"
+                )
+
+                if attempt < self.max_retries - 1:
+                    logger.info(f"Retrying in {wait_time} seconds...")
+                    time.sleep(wait_time)
+                else:
+                    error_msg = f"API connection failed after {self.max_retries} attempts: {str(e)}"
+                    logger.error(error_msg)
+                    return {'error': error_msg, 'error_type': 'connection_error'}
+
+            except anthropic.RateLimitError as e:
+                logger.warning(f"Rate limit hit for {document_title}: {str(e)}")
+
+                if attempt < self.max_retries - 1:
+                    logger.info(f"Waiting {self.rate_limit_delay} seconds before retry...")
+                    time.sleep(self.rate_limit_delay)
+                else:
+                    error_msg = f"Rate limit exceeded after {self.max_retries} attempts"
+                    logger.error(error_msg)
+                    return {'error': error_msg, 'error_type': 'rate_limit'}
+
+            except anthropic.APITimeoutError as e:
+                logger.warning(f"API timeout for {document_title} (attempt {attempt + 1}/{self.max_retries})")
+
+                if attempt < self.max_retries - 1:
+                    wait_time = 2 ** attempt
+                    logger.info(f"Retrying in {wait_time} seconds...")
+                    time.sleep(wait_time)
+                else:
+                    error_msg = f"API timeout after {self.max_retries} attempts"
+                    logger.error(error_msg)
+                    return {'error': error_msg, 'error_type': 'timeout'}
+
+            except anthropic.APIError as e:
+                # General API error (authentication, invalid request, etc.)
+                error_msg = f"API error: {str(e)}"
+                logger.error(error_msg)
+                return {'error': error_msg, 'error_type': 'api_error'}
+
+            except Exception as e:
+                # Unexpected error
+                error_msg = f"Unexpected error: {str(e)}"
+                logger.error(error_msg)
+                return {'error': error_msg, 'error_type': 'unexpected_error'}
+
+        # Should never reach here, but just in case
+        return {'error': 'Unknown error in retry logic', 'error_type': 'unknown'}
     
     def extract_from_multiple_papers(
         self,
