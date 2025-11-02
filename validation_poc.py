@@ -11,7 +11,7 @@ This demonstrates improved data extraction with:
 
 import json
 import numpy as np
-from dataclasses import dataclass, asdict
+from dataclasses import dataclass
 from typing import List, Dict, Any, Optional
 from meta_analysis_extractor import MetaAnalysisExtractor
 import anthropic
