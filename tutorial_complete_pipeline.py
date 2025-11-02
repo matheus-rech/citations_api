@@ -120,7 +120,20 @@ def method2_step_by_step():
 
     calculator = workflow.step2_calculate_effect_sizes(output_dir=output_dir)
 
-    print("\n✓ Effect sizes calculated for all studies")
+    # Inspect effect size results
+    if calculator:
+        if isinstance(calculator, list):
+            print(f"\n✓ Effect sizes calculated for {len(calculator)} studies")
+            for idx, effect in enumerate(calculator, 1):
+                study_id = effect.get('study_id', f'Study {idx}')
+                effect_type = effect.get('effect_type', 'N/A')
+                effect_value = effect.get('effect_size', 'N/A')
+                ci = effect.get('confidence_interval', 'N/A')
+                print(f"  - {study_id}: {effect_type} = {effect_value}, CI: {ci}")
+        else:
+            print(f"\n✓ Effect sizes calculated: {calculator}")
+    else:
+        print("\n✓ Effect sizes calculated, but no results to display.")
 
     # ─────────────────────────────────────────────────────────────────────
     # STEP 3: Perform Meta-Analysis
